@@ -192,8 +192,23 @@ def main():
     m0 = parse_matches(fetch_page(0, expect), 0)
     print(f"   ✓ 让球胜平负: {len(m3)} 场  胜负过关: {len(m0)} 场")
 
-    all_nums = sorted(set(list(m3.keys()) + list(m0.keys())))
-    print(f"   ✓ 合并后共 {len(all_nums)} 场")
+    # 两个玩法的编号体系不同：胜负过关里掺了篮球/美职橄榄，足球编号整体后移。
+    # 实测同一场：让球页388-402 ↔ 过页403-417；且有 128 场编号相同却根本不是同一场
+    # （编号直接取 = 张冠李戴）。故配对键用「主队+客队」，编号仅作显示。
+    idx3 = {(v["home"].strip(), v["away"].strip()): n for n, v in m3.items()}
+    paired = []  # [(显示编号, d3, d0)]
+    for n0 in sorted(m0):
+        d0 = m0[n0]
+        n3 = idx3.get((d0["home"].strip(), d0["away"].strip()))
+        paired.append((n0, m3[n3] if n3 is not None else {}, d0))
+    name0 = {(v["home"].strip(), v["away"].strip()) for v in m0.values()}
+    only3 = [(n, v) for n, v in sorted(m3.items())
+             if (v["home"].strip(), v["away"].strip()) not in name0]
+    paired += [(n, v, {}) for n, v in only3]
+    n_matched = sum(1 for _, d3, _ in paired if d3)
+    only0 = len(paired) - n_matched - len(only3)
+    print(f"   ✓ 按队名配对: {len(paired)} 场（对到让球盘 {n_matched} 场 / 仅过页 {only0} / 仅让球页 {len(only3)}）")
+    rowmap = {num: (d3, d0) for num, d3, d0 in paired}
 
     wb = Workbook()
     ws = wb.active
@@ -219,9 +234,7 @@ def main():
     style_header(ws, 3, max_col)
 
     row = 4
-    for num in all_nums:
-        d3 = m3.get(num, {})
-        d0 = m0.get(num, {})
+    for num, d3, d0 in paired:
 
         league = d3.get("league", d0.get("league", ""))
         time_val = d3.get("time", d0.get("time", ""))
@@ -290,8 +303,8 @@ def main():
     wb.save(OUTPUT_FILE)
     print(f"\n✅ 看板已生成: {OUTPUT_FILE}")
     print(f"\n📋 预览 (前5场):")
-    for num in all_nums[:5]:
-        d3, d0 = m3.get(num, {}), m0.get(num, {})
+    for num in [n for n, _, _ in paired][:5]:
+        d3, d0 = rowmap[num]
         l = d3.get("league", d0.get("league", ""))
         t = d3.get("time", d0.get("time", ""))
         h = d3.get("home", d0.get("home", ""))
