@@ -17,6 +17,10 @@ cd "$SRC"
 OUTPUT=$(python3 scripts/gen_500_dashboard.py 2>&1)
 echo "$OUTPUT"
 
+# 回填最近若干期比分/赛果（2026-10-16）：gen_500_dashboard 只抓当期且当期只抓一次，
+# 完赛晚于抓取时刻的场次比分永远不会进 xlsx → 历史看板长期显示 '-'
+python3 scripts/backfill_beidan_scores.py --periods 12 2>&1 || echo "⚠️ 比分回填失败(非致命)"
+
 # 重新生成 index.html（含所有期数 + 全部赛事 + 下拉选择）
 python3 scripts/gen_beidan_html.py 2>&1
 
@@ -37,6 +41,9 @@ cd "$PUB"
 git init
 git checkout -b gh-pages
 cp "$XLSX_PATH" "beidan_${EXPECT}_dashboard.xlsx"
+# 全量发布历史 xlsx（2026-10-16）：下拉框每期都有下载链接，此前只发当期 →
+# 其余 24 期链接全 404。单期 16–40KB，全量约 0.7MB，force-push 单提交无负担。
+cp ~/beidan/beidan_*_dashboard.xlsx . 2>/dev/null || true
 cp ~/beidan/beidan_dashboard.html index.html
 git add -A
 git commit -m "update: 北单${EXPECT}期看板 $(date +%Y-%m-%d) (index.html+xlsx)"
